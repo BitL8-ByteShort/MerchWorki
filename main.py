@@ -2,6 +2,8 @@ from fastapi import FastAPI
 import requests
 from fuzzywuzzy import fuzz
 from bs4 import BeautifulSoup
+import os
+import uvicorn
 
 app = FastAPI()
 
@@ -72,3 +74,7 @@ def check_trademark(name: str):
         "TESS_Results": tess_results
     }
 
+# Run Uvicorn (Fix Port Issue for Render)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))  # Render assigns a PORT dynamically
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
