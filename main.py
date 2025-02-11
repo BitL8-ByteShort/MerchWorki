@@ -27,7 +27,7 @@ def check_trademark_similarity(listing_name, trademarks):
         name = trademark.get("mark_identification", "")
         similarity = fuzz.ratio(listing_name.lower(), name.lower())
 
-        if similarity > 70:  # Adjust similarity threshold
+        if similarity > 60:  # Adjust similarity threshold
             results.append({
                 "Trademark": name,
                 "Similarity": similarity,
