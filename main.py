@@ -4,8 +4,8 @@ import os
 
 app = FastAPI()
 
-# USPTO API Key (Replace with your actual key)
-USPTO_API_KEY = os.getenv("USPTO_API_KEY", "kilpnH13NouEpLZKq2AKp3McIXnaFaNq")
+# Load USPTO API Key from Environment Variables
+USPTO_API_KEY = os.getenv("USPTO_API_KEY")
 
 # Function to search for a trademark's serial number
 def search_trademark_by_name(keyword):
@@ -62,4 +62,5 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))  # Render assigns a PORT dynamically
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+
 
