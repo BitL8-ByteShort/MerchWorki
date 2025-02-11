@@ -1,82 +1,57 @@
 from fastapi import FastAPI
 import requests
-from fuzzywuzzy import fuzz
 from bs4 import BeautifulSoup
 
 app = FastAPI()
 
-# Function to query USPTO Basic Search API
-def search_uspto_trademarks(keyword):
-    base_url = "https://assignment-api.uspto.gov/trademark/basicSearch"
-    params = {"searchExpression": keyword, "fromRecord": 0, "toRecord": 5}  # Get top 5 results
-
-    response = requests.get(base_url, params=params)
-
-    if response.status_code == 200:
-        data = response.json()
-        if "results" in data:
-            return data["results"]  # Extract trademark data
-    return []
-
-# Function to check similarity
-def check_trademark_similarity(listing_name, trademarks):
-    results = []
-    
-    for trademark in trademarks:
-        name = trademark.get("markLiteral", "")  # Adjusted for Basic Search API
-        similarity = fuzz.ratio(listing_name.lower(), name.lower())
-
-        if similarity > 60:  # Lowered threshold to catch more matches
-            results.append({
-                "Trademark": name,
-                "Similarity": similarity,
-                "Serial Number": trademark.get("serialNumber", "N/A"),
-                "Registration Number": trademark.get("registrationNumber", "N/A"),
-                "Status": trademark.get("statusCode", "N/A"),
-                "Live/Dead": "LIVE" if trademark.get("statusCode", "").lower() == "live" else "DEAD"
-            })
-    
-    return results
-
-# Function to scrape TESS for trademarks
-def scrape_tess(keyword):
-    url = f"https://tmsearch.uspto.gov/bin/gate.exe?f=searchss&state=4803:6oij73.1.1&p_search=searchstr&expr={keyword.replace(' ', '+')}&p_s_ALL=ALL&p_op_ALL=AND"
+# Function to search TESS for a trademark serial number
+def search_trademark_by_name(keyword):
+    search_url = f"https://tmsearch.uspto.gov/bin/showfield?f=doc&state=4803:e1sj3t.2.1&word={keyword.replace(' ', '+')}"
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    response = requests.get(url, headers=headers)
-
+    response = requests.get(search_url, headers=headers)
     if response.status_code == 200:
         soup = BeautifulSoup(response.text, "html.parser")
-        results = soup.find_all("tr")
 
-        trademark_names = []
-        for row in results:
-            cells = row.find_all("td")
-            if len(cells) > 1:
-                trademark_names.append(cells[0].text.strip())
+        # Extract serial number
+        serial_number = None
+        tables = soup.find_all("table")
+        for table in tables:
+            rows = table.find_all("tr")
+            for row in rows:
+                cells = row.find_all("td")
+                if len(cells) > 1 and cells[0].text.strip().isdigit():  # Serial numbers are numeric
+                    serial_number = cells[0].text.strip()
+                    break
+            if serial_number:
+                break
 
-        return trademark_names
-    return []
+        return serial_number if serial_number else "No Serial Number Found"
+
+    return "TESS Search Failed"
+
+# Function to fetch trademark status from USPTO TSDR API
+def check_trademark_status(serial_number):
+    base_url = f"https://tsdr.uspto.gov/ts/cd/status?sn={serial_number}"
+    response = requests.get(base_url)
+
+    if response.status_code == 200:
+        return {"USPTO_Status": f"Trademark status found for Serial No. {serial_number}", "link": base_url}
+    
+    return {"error": "USPTO TSDR API did not return data"}
 
 # API Endpoint to Check Trademark
 @app.get("/check_trademark/")
 def check_trademark(name: str):
-    # Search USPTO Basic Search API
-    trademarks = search_uspto_trademarks(name)
-    matches = check_trademark_similarity(name, trademarks)
+    serial_number = search_trademark_by_name(name)
 
-    # Search TESS for additional verification
-    tess_results = scrape_tess(name)
+    if "No Serial Number Found" in serial_number or "TESS Search Failed" in serial_number:
+        return {"error": serial_number}
+
+    uspto_result = check_trademark_status(serial_number)
 
     return {
-        "USPTO_Matches": matches,
-        "TESS_Results": tess_results
+        "Trademark": name,
+        "Serial Number": serial_number,
+        "USPTO_Result": uspto_result
     }
-
-# Run Uvicorn (Fix Port Issue for Render)
-if __name__ == "__main__":
-    import os
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))  # Render assigns a PORT dynamically
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
-
